@@ -22,22 +22,29 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "SDK manager not found"
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
-      - name: Set up Gradle 8.13
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.13'
 
-      - name: Build Debug APK
+      - name: Build APK
         run: gradle --no-daemon :app:assembleDebug
 
-      - name: Upload Bharat Tunes APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Bharat-Tunes-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          
           
