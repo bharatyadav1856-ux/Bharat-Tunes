@@ -2,9 +2,9 @@ package com.bharat.tunes
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -14,13 +14,10 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
 
 class MainActivity : Activity() {
 
-    private var mediaPlayer: MediaPlayer? = null
     private val storagePermissionCode = 100
-
     private lateinit var songList: LinearLayout
     private lateinit var message: TextView
 
@@ -67,6 +64,9 @@ class MainActivity : Activity() {
 
         val scanButton = Button(this).apply {
             text = "SCAN MY MUSIC"
+            setOnClickListener {
+                checkPermissionAndScan()
+            }
         }
 
         songList = LinearLayout(this).apply {
@@ -75,10 +75,6 @@ class MainActivity : Activity() {
 
         val scrollView = ScrollView(this).apply {
             addView(songList)
-        }
-
-        scanButton.setOnClickListener {
-            checkPermissionAndScan()
         }
 
         root.addView(title)
@@ -117,7 +113,11 @@ class MainActivity : Activity() {
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        super.onRequestPermissionsResult(
+            requestCode,
+            permissions,
+            grantResults
+        )
 
         if (requestCode == storagePermissionCode &&
             grantResults.isNotEmpty() &&
@@ -134,16 +134,13 @@ class MainActivity : Activity() {
 
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.DISPLAY_NAME
+            MediaStore.Audio.Media.TITLE
         )
-
-        val selection = MediaStore.Audio.Media.IS_MUSIC + "!= 0"
 
         val cursor = contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection,
-            selection,
+            null,
             null,
             MediaStore.Audio.Media.TITLE + " ASC"
         )
@@ -151,12 +148,11 @@ class MainActivity : Activity() {
         var songCount = 0
 
         cursor?.use {
-            val idColumn = it.getColumnIndexOrThrow(
-                MediaStore.Audio.Media._ID
-            )
-            val titleColumn = it.getColumnIndexOrThrow(
-                MediaStore.Audio.Media.TITLE
-            )
+            val idColumn =
+                it.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+
+            val titleColumn =
+                it.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
 
             while (it.moveToNext()) {
                 val songId = it.getLong(idColumn)
@@ -172,57 +168,25 @@ class MainActivity : Activity() {
                     isAllCaps = false
 
                     setOnClickListener {
-                        playSong(songUri, songTitle)
+                        val intent =
+                            Intent(this@MainActivity, PlayerActivity::class.java)
+
+                        intent.putExtra("SONG_URI", songUri.toString())
+                        intent.putExtra("SONG_TITLE", songTitle)
+
+                        startActivity(intent)
                     }
                 }
 
-                songList.addView(
-                    songButton,
-                    LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                    )
-                )
-
+                songList.addView(songButton)
                 songCount++
             }
         }
 
         message.text = if (songCount > 0) {
-            "Found $songCount song(s). Tap a song to play! 🎵"
+            "Found $songCount song(s). Tap a song to open the player! 🎵"
         } else {
-            "No music files found. Check app permission."
+            "No music files found."
         }
-    }
-
-    private fun playSong(uri: Uri, title: String) {
-        mediaPlayer?.release()
-
-        try {
-            mediaPlayer = MediaPlayer().apply {
-                setDataSource(this@MainActivity, uri)
-                prepare()
-                start()
-            }
-
-            Toast.makeText(
-                this,
-                "Now playing: $title 🎵",
-                Toast.LENGTH_SHORT
-            ).show()
-
-        } catch (e: Exception) {
-            Toast.makeText(
-                this,
-                "Could not play: $title",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
-
-    override fun onDestroy() {
-        mediaPlayer?.release()
-        mediaPlayer = null
-        super.onDestroy()
     }
 }
