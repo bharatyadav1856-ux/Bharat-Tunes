@@ -1,10 +1,12 @@
 package com.bharat.tunes
 
+import android.Manifest
 import android.app.Activity
-import android.os.Bundle
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Bundle
 import android.provider.MediaStore
 import android.view.Gravity
 import android.view.ViewGroup
@@ -17,6 +19,10 @@ import android.widget.Toast
 class MainActivity : Activity() {
 
     private var mediaPlayer: MediaPlayer? = null
+    private val storagePermissionCode = 100
+
+    private lateinit var songList: LinearLayout
+    private lateinit var message: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,7 +57,7 @@ class MainActivity : Activity() {
             setPadding(0, 55, 0, 15)
         }
 
-        val message = TextView(this).apply {
+        message = TextView(this).apply {
             text = "Tap Scan My Music to find songs."
             textSize = 16f
             setTextColor(Color.LTGRAY)
@@ -63,8 +69,7 @@ class MainActivity : Activity() {
             text = "SCAN MY MUSIC"
         }
 
-        // यह जगह गानों की list दिखाने के लिए है
-        val songList = LinearLayout(this).apply {
+        songList = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
 
@@ -73,20 +78,14 @@ class MainActivity : Activity() {
         }
 
         scanButton.setOnClickListener {
-            scanMusic(songList, message)
+            checkPermissionAndScan()
         }
 
         root.addView(title)
         root.addView(subtitle)
         root.addView(heading)
         root.addView(message)
-        root.addView(
-            scanButton,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
+        root.addView(scanButton)
 
         root.addView(
             scrollView,
@@ -100,37 +99,68 @@ class MainActivity : Activity() {
         setContentView(root)
     }
 
-    private fun scanMusic(songList: LinearLayout, message: TextView) {
+    private fun checkPermissionAndScan() {
+        if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            scanMusic()
+        } else {
+            requestPermissions(
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE),
+                storagePermissionCode
+            )
+        }
+    }
 
-        // पुरानी list हटाओ
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        if (requestCode == storagePermissionCode &&
+            grantResults.isNotEmpty() &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED
+        ) {
+            scanMusic()
+        } else {
+            message.text = "Permission is needed to scan your music."
+        }
+    }
+
+    private fun scanMusic() {
         songList.removeAllViews()
 
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.DISPLAY_NAME
         )
+
+        val selection = MediaStore.Audio.Media.IS_MUSIC + "!= 0"
 
         val cursor = contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection,
-            null,
+            selection,
             null,
             MediaStore.Audio.Media.TITLE + " ASC"
         )
 
-        if (cursor != null && cursor.moveToFirst()) {
+        var songCount = 0
 
-            val idColumn =
-                cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+        cursor?.use {
+            val idColumn = it.getColumnIndexOrThrow(
+                MediaStore.Audio.Media._ID
+            )
+            val titleColumn = it.getColumnIndexOrThrow(
+                MediaStore.Audio.Media.TITLE
+            )
 
-            val titleColumn =
-                cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-
-            var songCount = 0
-
-            do {
-                val songId = cursor.getLong(idColumn)
-                val songTitle = cursor.getString(titleColumn)
+            while (it.moveToNext()) {
+                val songId = it.getLong(idColumn)
+                val songTitle = it.getString(titleColumn)
 
                 val songUri = Uri.withAppendedPath(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
@@ -140,6 +170,7 @@ class MainActivity : Activity() {
                 val songButton = Button(this).apply {
                     text = "🎵 $songTitle"
                     isAllCaps = false
+
                     setOnClickListener {
                         playSong(songUri, songTitle)
                     }
@@ -154,22 +185,17 @@ class MainActivity : Activity() {
                 )
 
                 songCount++
+            }
+        }
 
-            } while (cursor.moveToNext())
-
-            message.text = "Found $songCount song(s). Tap a song to play! 🎵"
-
-            cursor.close()
-
+        message.text = if (songCount > 0) {
+            "Found $songCount song(s). Tap a song to play! 🎵"
         } else {
-            message.text = "No music files found on your phone."
-            cursor?.close()
+            "No music files found. Check app permission."
         }
     }
 
     private fun playSong(uri: Uri, title: String) {
-
-        // अगर कोई पुराना गाना चल रहा है तो बंद करो
         mediaPlayer?.release()
 
         try {
@@ -188,8 +214,8 @@ class MainActivity : Activity() {
         } catch (e: Exception) {
             Toast.makeText(
                 this,
-                "Could not play this song.",
-                Toast.LENGTH_SHORT
+                "Could not play: $title",
+                Toast.LENGTH_LONG
             ).show()
         }
     }
