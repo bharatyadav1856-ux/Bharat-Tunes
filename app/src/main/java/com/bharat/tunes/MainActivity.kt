@@ -1,9 +1,9 @@
-
 package com.bharat.tunes
 
 import android.app.Activity
 import android.os.Bundle
 import android.graphics.Color
+import android.provider.MediaStore
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
@@ -48,7 +48,7 @@ class MainActivity : Activity() {
         }
 
         val message = TextView(this).apply {
-            text = "Your favourite songs belong here."
+            text = "Tap Scan My Music to find songs on your phone."
             textSize = 16f
             setTextColor(Color.LTGRAY)
             gravity = Gravity.CENTER
@@ -57,13 +57,10 @@ class MainActivity : Activity() {
 
         val scanButton = Button(this).apply {
             text = "SCAN MY MUSIC"
-            setOnClickListener {
-                Toast.makeText(
-                    this@MainActivity,
-                    "Music scanning coming in the next step!",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
+        }
+
+        scanButton.setOnClickListener {
+            scanMusic(message)
         }
 
         root.addView(title)
@@ -80,5 +77,34 @@ class MainActivity : Activity() {
         )
 
         setContentView(root)
+    }
+
+    private fun scanMusic(message: TextView) {
+        val projection = arrayOf(
+            MediaStore.Audio.Media.TITLE
+        )
+
+        val cursor = contentResolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            projection,
+            null,
+            null,
+            null
+        )
+
+        val songCount = cursor?.count ?: 0
+        cursor?.close()
+
+        message.text = if (songCount > 0) {
+            "Found $songCount songs on your phone! 🎵"
+        } else {
+            "No music files found on your phone."
+        }
+
+        Toast.makeText(
+            this,
+            "Scan complete!",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 }
